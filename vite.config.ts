@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { cacheNameFor, createServiceWorkerSource } from './scripts/pwa-shell-source.mjs';
 
@@ -39,4 +39,15 @@ export default defineConfig({
   plugins: [react(), pwaShellPlugin()],
   base: './',
   define: { __APP_VERSION__: JSON.stringify(version) },
+  test: {
+    setupFiles: ['src/i18n/testCatalogSetup.ts'],
+    // La puerta de calidad sólo observa el producto: nada de copias, respaldos
+    // ni árboles de trabajo que puedan vivir junto a `src/`.
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    exclude: ['**/node_modules/**', '**/dist/**'],
+    // El entorno por defecto es Node. Una prueba que necesite DOM lo pide en su
+    // propia cabecera con `// @vitest-environment jsdom`, que es explícito y no
+    // depende de que el nombre del archivo acierte con un glob.
+    environment: 'node',
+  },
 });

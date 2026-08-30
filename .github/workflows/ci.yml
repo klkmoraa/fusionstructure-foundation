@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Puerta de calidad
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # `check` encadena lint, typecheck, pruebas y build. Se ejecuta como un
+      # solo paso a propósito: si la compilación falla, el lint que pasó antes
+      # no significa que la rama esté sana, y partirlo invita a leerlo así.
+      - name: lint · typecheck · test · build
+        run: npm run check
