@@ -43,47 +43,6 @@ solver una vez que deje de ser experimental), la forma correcta es la misma
 que usan los repos de origen: un gate ejecutable con una razón escrita al
 lado, no una convención de palabra.
 
-## Flujo de trabajo: spec → plan → ejecutar → verificar → reporte
-
-Este repositorio hereda de StructureCo/Copia-web la convención de trabajo de
-las skills `superpowers:*` (no instaladas por defecto en toda sesión; cuando
-estén disponibles, éste es el flujo a seguir — y cuando no, sigue siendo la
-forma de organizar el trabajo aunque se ejecute a mano):
-
-1. **Spec** — para un cambio no trivial, un documento de diseño en
-   `docs/superpowers/specs/YYYY-MM-DD-slug-design.md`: qué se va a construir,
-   qué queda fuera explícitamente, y con qué contrato. Usa
-   `superpowers:brainstorming` (o la conversación equivalente) para llegar a
-   esa forma antes de escribir código.
-2. **Plan** — `docs/superpowers/plans/YYYY-MM-DD-slug.md`: tareas concretas
-   con casillas (`- [ ]`), cada una con sus archivos y su criterio de
-   verificación. La cabecera declara la sub-skill requerida para ejecutarlo:
-
-   ```
-   > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans
-   > to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax
-   > for tracking.
-   ```
-
-   Cuando las tareas del plan son independientes entre sí, se prefiere
-   `superpowers:subagent-driven-development` (recomendado) sobre
-   `superpowers:executing-plans` para paralelizarlas.
-3. **Ejecutar** — TDD estricto (`superpowers:test-driven-development`): la
-   prueba se escribe primero, se confirma que falla por la razón esperada
-   (`RED`), y sólo entonces se implementa lo mínimo para pasarla (`GREEN`).
-   Cada tarea del plan marca su casilla al cerrarse.
-4. **Verificar antes de cerrar** — `superpowers:verification-before-completion`:
-   ejecutar `npm run check` y leer la salida, no asumir que pasó. No se
-   declara un cambio terminado sin haberlo comprobado.
-5. **Reporte** — tras un cambio relevante, un documento corto en
-   `reports/YYYY-MM-DD-HHmm-slug.md` que explique qué cambió y por qué, y se
-   commitea junto con el cambio. Es el puente con cualquier otra sesión o
-   agente que trabaje este repositorio sin ver esta conversación.
-
-Un cambio pequeño y autocontenido no necesita las cinco etapas — spec y plan
-son para lo que vale la pena planear antes de tocar código. `npm run check` y
-un mensaje de commit que explique el porqué siguen siendo obligatorios siempre.
-
 ## Identidad visual
 
 `src/design-system/tokens.css` es la fuente única de color, forma, materia y
