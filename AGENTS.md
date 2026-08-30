@@ -43,6 +43,46 @@ solver una vez que deje de ser experimental), la forma correcta es la misma
 que usan los repos de origen: un gate ejecutable con una razón escrita al
 lado, no una convención de palabra.
 
+## Flujo de trabajo: Superpowers
+
+[`obra/superpowers`](https://github.com/obra/superpowers) es una metodología
+de desarrollo de software para agentes de código, empaquetada como un
+conjunto de skills instalables. No viene activada por defecto en toda sesión
+— se instala como plugin (en Claude Code: `/plugin install
+superpowers@claude-plugins-official`) y su skill de arranque,
+`using-superpowers`, es la que hace que las demás se invoquen solas según lo
+que el agente esté haciendo. Sin ese arranque, las skills están en disco pero
+nunca se disparan.
+
+Cuando está disponible, propone siete fases:
+
+1. **Brainstorming** — refinar la idea con preguntas antes de escribir código.
+2. **Using Git Worktrees** — aislar el trabajo en una rama/worktree nueva.
+3. **Writing Plans** — descomponer en tareas de 2-5 minutos con criterios
+   exactos.
+4. **Subagent-Driven Development** — despachar subagentes por tarea, con
+   revisión en dos etapas.
+5. **Test-Driven Development** — RED → GREEN → REFACTOR obligatorio.
+6. **Requesting Code Review** — verificar el resultado contra el plan antes
+   de seguir.
+7. **Finishing a Development Branch** — decidir merge/PR y limpiar.
+
+Las catorce skills del repositorio, agrupadas como las agrupa el propio
+proyecto:
+
+| Categoría | Skills |
+|---|---|
+| Meta | `using-superpowers` (arranque), `writing-skills` |
+| Colaboración | `brainstorming`, `writing-plans`, `executing-plans`, `dispatching-parallel-agents`, `subagent-driven-development`, `requesting-code-review`, `receiving-code-review`, `using-git-worktrees`, `finishing-a-development-branch` |
+| Pruebas | `test-driven-development` |
+| Depuración | `systematic-debugging`, `verification-before-completion` |
+
+Ninguna de estas skills está instalada en este repositorio ni se asume
+disponible en toda sesión que lo trabaje: es una referencia de proceso, no
+una dependencia. Cuando esté disponible, es el flujo a seguir; cuando no,
+`npm run check` y un mensaje de commit que explique el porqué siguen siendo
+lo mínimo obligatorio (ver "Antes de cerrar" más abajo).
+
 ## Identidad visual
 
 `src/design-system/tokens.css` es la fuente única de color, forma, materia y
