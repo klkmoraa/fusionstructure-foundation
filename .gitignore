@@ -1,0 +1,64 @@
+node_modules/
+dist/
+qa-artifacts/
+/capturas/
+/reports/evidence/
+/output/
+tmp/
+__pycache__/
+*.pyc
+.vite-qa.log
+.env
+.env.*
+*.zip
+
+# Local Netlify folder
+.netlify
+
+# Tooling interno de agentes/skills (no forma parte del producto)
+.agents/
+.claude/
+.superpowers/
+.playwright/
+.playwright-cli/
+skill-audit/
+skills-lock.json
+structureco-classroom-mode/
+structureco-documentation-handoff/
+structureco-engine-safety/
+structureco-release-certification/
+structureco-skills/
+structureco-ux-responsive/
+
+# Backups y temporales de trabajo
+/.worktrees/
+structureCo-backup-*/
+structureCo-contexto-*/
+structureCo-create-zip-parts.py
+structureCo-documentation-builder.py
+structureCo-email-parts.py
+structureCo-finalize-volumes.py
+structureCo-local-master-builder.py
+structureCo-worktrees/
+structureco-design-review-package-*
+structureco-design-review/
+structureco-palette-lab-package-*
+structureco-palette-lab/
+structureco-sites-worktrees/
+structureco-sites/
+/structureco-sites-test/
+/structureco-sites-test-publish/
+/validation/topbar-repeat-before/
+/validation/topbar-repeat-after/
+*.tar.gz
+*.json.manifest
+*.part-*
+structureCo/
+structureCo-contexto-total-autocontenido-*/
+structureCo-documentacion-integral-*/
+
+# Copia temporal que `npm run audit:i18n` deja mientras interroga al compilador.
+# Sólo existe durante esa ejecución; si aparece en un diff es que una corrida
+# murió sin poder restaurar, y la siguiente la usará para reparar el catálogo.
+src/i18n/.catalogs.audit-backup
+src/i18n/.catalogs.audit-lock
