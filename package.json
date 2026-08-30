@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "pdf:reportlab": "node scripts/reportlab-launch.mjs",
     "pdf:reportlab-service": "node scripts/reportlab-launch.mjs --serve 127.0.0.1:8765",
-    "check": "npm run lint && npm run typecheck && npm run build"
+    "check": "npm run lint && npm run typecheck && npm run build",
+    "assets:render": "node scripts/render-structural-assets.mjs"
   },
   "dependencies": {
     "fflate": "^0.8.3",
