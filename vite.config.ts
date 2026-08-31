@@ -20,7 +20,7 @@ const collectBuildFiles = async (relative = ''): Promise<string[]> => {
 };
 
 const pwaShellPlugin = () => ({
-  name: 'structureco-pwa-shell',
+  name: 'fusionstructure-pwa-shell',
   async closeBundle() {
     const files = (await collectBuildFiles()).filter((file) => file !== 'sw.js' && !file.endsWith('.map')).sort();
     const digest = createHash('sha256');

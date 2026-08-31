@@ -1,98 +1,64 @@
 # FusionStructure — reglas persistentes
 
-Este archivo describe **este** repositorio (`github.com/klkmoraa/FusionStructure`),
-no StructureCo ni Copia-web, de los que salió. Una regla que nadie puede
-verificar no es una regla, es un deseo: lo que queda aquí tiene un gate que lo
-respalde o una razón comprobable.
+Este archivo define cómo trabajar en este repositorio. FusionStructure es experimental: ninguna carpeta, módulo, solver, esquema, worker, persistencia o superficie visual debe tratarse como definitiva.
 
-## Qué manda, y en qué orden
+## Autoridad
 
-1. El código, las pruebas y los gates ejecutables (`npm run check`).
-2. La documentación canónica (`docs/README.md` es el índice).
-3. El historial de Git.
+Cuando exista una discrepancia, el orden es:
 
-Ante una discrepancia gana lo de más arriba. Un plan, una especificación o un
-reporte antiguo **no prueban** que algo esté implementado — sólo el código y
-`npm run check` lo prueban.
+1. código ejecutable y pruebas;
+2. puertas automatizadas;
+3. documentación canónica;
+4. historial de Git;
+5. planes, ideas o conversaciones anteriores.
 
-## Sin fronteras protegidas
+Un plan no demuestra que algo esté implementado. La implementación y sus pruebas sí aportan evidencia, aunque una puerta verde tampoco convierte una función experimental en software profesional certificado.
 
-StructureCo y Copia-web congelan `src/engine/**`, `src/workers/**`,
-`src/data/**`, `src/store/ProjectContext.tsx` y `src/types.ts` detrás de un
-checksum (`npm run verify:protected`): tocarlos exige autorización explícita.
-**FusionStructure no hereda esa política.** El dominio entero —solver, motor,
-schema, persistencia, workers, Space 3D— sigue siendo experimental mientras
-dure la fusión, y la única regla real sobre esa frontera es que no hay
-frontera: todo es movible, rediseñable o sustituible sin pedir permiso
-especial. No existe un `verify:protected` en este repositorio y no hay que
-añadir uno por costumbre heredada.
+## Sin áreas protegidas
 
-Eso no es licencia para romper sin cuidado. Lo que sostiene la calidad aquí no
-es un archivo intocable, es lo que se puede ejecutar:
+No existe una política de archivos protegidos en este repositorio. Cualquier parte puede rediseñarse, reescribirse, reemplazarse o eliminarse cuando el cambio esté justificado y se actualicen sus referencias, migraciones, pruebas y documentación.
 
-- `npm run check` — lint, typecheck, pruebas y build. Ver
-  [`docs/estado-de-la-fusion.md`](docs/estado-de-la-fusion.md) para qué cubren
-  hoy las pruebas y qué queda deliberadamente sin cubrir, y por qué.
-- `src/design-system/designSystem.test.ts` — la única superficie que sí es una
-  guarda estricta: la identidad visual (minimalismo acromático, sin
-  claymorphism, sin capa de parches). Ver
-  [`docs/sistema-visual.md`](docs/sistema-visual.md).
+Esta regla es técnica y de proceso. No significa que desaparezcan la licencia MIT, los derechos de autor o las licencias de dependencias y estándares externos.
 
-Si algún día una pieza concreta necesita protegerse de verdad (por ejemplo, el
-solver una vez que deje de ser experimental), la forma correcta es la misma
-que usan los repos de origen: un gate ejecutable con una razón escrita al
-lado, no una convención de palabra.
+## Calidad mínima
 
-## Flujo de trabajo: Superpowers
+Antes de cerrar un cambio relevante:
 
-[`obra/superpowers`](https://github.com/obra/superpowers) es una metodología
-de desarrollo de software para agentes de código, empaquetada como un
-conjunto de skills instalables. No viene activada por defecto en toda sesión
-— se instala como plugin (en Claude Code: `/plugin install
-superpowers@claude-plugins-official`) y su skill de arranque,
-`using-superpowers`, es la que hace que las demás se invoquen solas según lo
-que el agente esté haciendo. Sin ese arranque, las skills están en disco pero
-nunca se disparan.
+- ejecutar `npm run check`;
+- leer el resultado completo;
+- indicar qué quedó verificado y qué no pudo ejecutarse;
+- actualizar la documentación si cambió el alcance, el formato de datos o una decisión de arquitectura;
+- conservar compatibilidad o escribir una migración cuando se toque información persistente;
+- no afirmar cumplimiento normativo, exactitud estructural o preparación para obra sin evidencia específica.
 
-Cuando está disponible, propone siete fases:
+La ausencia de una prueba no es evidencia de que la función funcione.
 
-1. **Brainstorming** — refinar la idea con preguntas antes de escribir código.
-2. **Using Git Worktrees** — aislar el trabajo en una rama/worktree nueva.
-3. **Writing Plans** — descomponer en tareas de 2-5 minutos con criterios
-   exactos.
-4. **Subagent-Driven Development** — despachar subagentes por tarea, con
-   revisión en dos etapas.
-5. **Test-Driven Development** — RED → GREEN → REFACTOR obligatorio.
-6. **Requesting Code Review** — verificar el resultado contra el plan antes
-   de seguir.
-7. **Finishing a Development Branch** — decidir merge/PR y limpiar.
+## Dirección de producto
 
-Las catorce skills del repositorio, agrupadas como las agrupa el propio
-proyecto:
+El producto se organiza alrededor de un proyecto común. Las futuras superficies deben poder relacionarse con:
 
-| Categoría | Skills |
-|---|---|
-| Meta | `using-superpowers` (arranque), `writing-skills` |
-| Colaboración | `brainstorming`, `writing-plans`, `executing-plans`, `dispatching-parallel-agents`, `subagent-driven-development`, `requesting-code-review`, `receiving-code-review`, `using-git-worktrees`, `finishing-a-development-branch` |
-| Pruebas | `test-driven-development` |
-| Depuración | `systematic-debugging`, `verification-before-completion` |
+- identidad, contexto, ubicación, unidades y fases;
+- modelo físico y modelo analítico;
+- entradas, hipótesis, resultados y procedencia;
+- documentos, revisiones, incidencias y aprobaciones;
+- cantidades, costos, recursos y programa;
+- campo, seguridad, cambios y expediente final;
+- educación, ejemplos y explicaciones.
 
-Ninguna de estas skills está instalada en este repositorio ni se asume
-disponible en toda sesión que lo trabaje: es una referencia de proceso, no
-una dependencia. Cuando esté disponible, es el flujo a seguir; cuando no,
-`npm run check` y un mensaje de commit que explique el porqué siguen siendo
-lo mínimo obligatorio (ver "Antes de cerrar" más abajo).
+Una feature nueva debe declarar qué entidad del proyecto modifica, qué validaciones necesita, cómo se deshace, cómo se guarda, cómo se exporta y cómo se prueba.
 
-## Identidad visual
+## Trabajo experimental
 
-`src/design-system/tokens.css` es la fuente única de color, forma, materia y
-tipografía; `src/design-system/material.css` reparte la materia por
-`data-level`. El resto del CSS consume roles, nunca literales. Ver
-[`docs/sistema-visual.md`](docs/sistema-visual.md).
+- Diferenciar siempre `Disponible`, `Experimental`, `Planeado` y `No comprometido`.
+- No esconder limitaciones detrás de una interfaz pulida.
+- No describir el producto como patentado, certificado, protegido o listo para obra si no existe evidencia específica.
+- Mantener las unidades y las conversiones explícitas.
+- Tratar resultados derivados como resultados versionados, no como datos de entrada.
+- Preferir formatos abiertos y adaptadores aislados.
+- Evitar que la interfaz sea la única fuente de reglas de negocio.
 
-## Antes de cerrar
+## Flujo de cierre
 
-- `npm run check` (lint · typecheck · pruebas · build). No se declara éxito
-  sin haberlo ejecutado y leído. Si algo falla, se dice qué falla.
-- No se hace push sin que el usuario lo pida en esa sesión.
-- No se abre Pull Request salvo petición explícita.
+El usuario autorizó actualizar el repositorio en esta sesión. Para cambios posteriores, no hacer push ni abrir un Pull Request salvo que se solicite explícitamente en esa sesión.
+
+Si el cambio toca una superficie crítica, dejar una nota de decisión o una prueba reproducible. Si una puerta falla, reportar el fallo exacto y no presentarlo como éxito.
