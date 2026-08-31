@@ -13,6 +13,8 @@
     "pdf:reportlab-service": "node scripts/reportlab-launch.mjs --serve 127.0.0.1:8765",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build",
     "assets:render": "node scripts/render-structural-assets.mjs",
+    "ui:shots": "node scripts/ui-shots.mjs",
+    "ui:audit": "node scripts/ui-audit.mjs",
     "test": "vitest run --maxWorkers=1 --pool=threads --no-file-parallelism"
   },
   "dependencies": {
