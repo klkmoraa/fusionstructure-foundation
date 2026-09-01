@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import { sites } from '@openai/sites-vite-plugin';
 import { cacheNameFor, createServiceWorkerSource } from './scripts/pwa-shell-source.mjs';
 
 // Provenance stamped on exported documents must come from the package, never from a
@@ -35,8 +36,20 @@ const pwaShellPlugin = () => ({
   },
 });
 
+// Sites publishes the Vite assets through a Worker. The worker deliberately
+// delegates every request to the platform asset binding, keeping the existing
+// client-side routing and relative asset URLs intact.
+const sitesStaticWorkerPlugin = () => ({
+  name: 'fusionstructure-sites-static-worker',
+  async closeBundle() {
+    const serverDirectory = new URL('./dist/server/', import.meta.url);
+    await mkdir(serverDirectory, { recursive: true });
+    await writeFile(new URL('./index.js', serverDirectory), "export default { async fetch(request, env) { return env.ASSETS.fetch(request); } };\n", 'utf8');
+  },
+});
+
 export default defineConfig({
-  plugins: [react(), pwaShellPlugin()],
+  plugins: [react(), sites(), pwaShellPlugin(), sitesStaticWorkerPlugin()],
   base: './',
   define: { __APP_VERSION__: JSON.stringify(version) },
   test: {
