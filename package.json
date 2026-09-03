@@ -16,6 +16,7 @@
     "ui:shots": "node scripts/ui-shots.mjs",
     "ui:audit": "node scripts/ui-audit.mjs",
     "ui:layout": "node scripts/ui-layout-audit.mjs",
+    "ui:plan": "node scripts/ui-plan-audit.mjs",
     "test": "vitest run --maxWorkers=1 --pool=threads --no-file-parallelism"
   },
   "dependencies": {
