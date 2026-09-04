@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, normalize, relative, resolve, sep } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -6,7 +6,10 @@ import * as ts from 'typescript';
 
 const sourceRoot = resolve(import.meta.dirname, '..');
 const space3dRoot = join(sourceRoot, 'space3d');
-const bridge2dCompatibilityException = join(space3dRoot, 'data', 'bridge2d.ts');
+const retiredBridge2d = join(space3dRoot, 'data', 'bridge2d.ts');
+const externalPlanar2dToSpace3dAdapter = join(sourceRoot, 'integrations', 'planar2dToSpace3d.ts');
+const space3dWorkspace = join(sourceRoot, 'features', 'space3d', 'Space3DWorkspace.tsx');
+const appShell = join(sourceRoot, 'App.tsx');
 const deprecatedMathAdapter = join(sourceRoot, 'engine', 'math');
 
 const sourceFiles = (directory: string): string[] => readdirSync(directory, { withFileTypes: true })
@@ -80,7 +83,6 @@ const forbiddenImportsIn = (sourceFile: string): string[] => importSpecifiersIn(
 describe('Space3D Foundation import boundary', () => {
   it('does not reach 2D engine or root product types through static, type-only, dynamic, require or supported alias imports', () => {
     const violations = sourceFiles(space3dRoot)
-      .filter((sourceFile) => normalize(sourceFile) !== normalize(bridge2dCompatibilityException))
       .flatMap((sourceFile) => forbiddenImportsIn(sourceFile)
         .map((specifier) => `${relative(sourceRoot, sourceFile)} -> ${specifier}`));
 
@@ -101,7 +103,24 @@ describe('Space3D Foundation import boundary', () => {
     expect(violations).toEqual([]);
   });
 
-  it('documents the sole bridge2d compatibility exception instead of silently widening the boundary', () => {
-    expect(forbiddenImportsIn(bridge2dCompatibilityException)).toEqual(['../../types']);
+  it('keeps the 2D-to-3D adapter outside Space3D and limited to explicit public entry points', () => {
+    expect(existsSync(retiredBridge2d)).toBe(false);
+    expect(existsSync(externalPlanar2dToSpace3dAdapter)).toBe(true);
+    expect(importSpecifiersIn(readFileSync(externalPlanar2dToSpace3dAdapter, 'utf8'))).toEqual([
+      '../space3d/public',
+      '../solver2d/public',
+    ]);
+  });
+
+  it('passes a handoff proposal through App and Space3DWorkspace instead of a live 2D project prop', () => {
+    const workspaceSource = readFileSync(space3dWorkspace, 'utf8');
+    const appSource = readFileSync(appShell, 'utf8');
+
+    expect(importSpecifiersIn(workspaceSource)).toContain('../../integrations/planar2dToSpace3d');
+    expect(importSpecifiersIn(workspaceSource)).not.toContain('../../types');
+    expect(workspaceSource).not.toMatch(/\bsourceProject\s*\??:/);
+    expect(workspaceSource).not.toMatch(/\bsourceProject\s*=/);
+    expect(importSpecifiersIn(appSource)).toContain('./integrations/planar2dToSpace3d');
+    expect(appSource).not.toContain('sourceProject=');
   });
 });
