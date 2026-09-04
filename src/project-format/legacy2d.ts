@@ -3,8 +3,8 @@
  * owned by its existing implementation and is not renamed as this neutral
  * project envelope.
  */
-export const LEGACY_FSTRUCTURE_PORTABLE_PAYLOAD_MIME = 'application/vnd.fusionstructure.project+json' as const;
 export const LEGACY_FSTRUCTURE_PORTABLE_FORMAT_VERSION = 1 as const;
+const LEGACY_FSTRUCTURE_PORTABLE_FORMATS = new Set(['fusionstructure-portable', 'structureco-portable']);
 
 export interface LegacyFStructurePortableInspection {
   readonly kind: 'legacy-2d-portable';
@@ -16,7 +16,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 /** Recognizes, but deliberately does not transform, the legacy 2D portable contract. */
 export const inspectLegacyFStructurePortable = (value: unknown): LegacyFStructurePortableInspection | undefined => {
   if (!isRecord(value)) return undefined;
-  if (value.mediaType !== LEGACY_FSTRUCTURE_PORTABLE_PAYLOAD_MIME) return undefined;
+  if (typeof value.format !== 'string' || !LEGACY_FSTRUCTURE_PORTABLE_FORMATS.has(value.format)) return undefined;
   if (value.formatVersion !== LEGACY_FSTRUCTURE_PORTABLE_FORMAT_VERSION) return undefined;
   return { kind: 'legacy-2d-portable', migration: 'external-adapter-required' };
 };

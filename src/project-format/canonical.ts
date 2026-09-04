@@ -1,27 +1,90 @@
+export type ProjectFormatJsonInspection =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly path: string; readonly message: string };
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
 };
 
-const canonicalize = (value: unknown, path: string): string => {
-  if (value === null) return 'null';
-  if (typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
+const isArrayIndex = (key: string, length: number): boolean => {
+  if (!/^(0|[1-9]\d*)$/.test(key)) return false;
+  const index = Number(key);
+  return Number.isSafeInteger(index) && index >= 0 && index < length && String(index) === key;
+};
+
+const invalid = (path: string, message: string): ProjectFormatJsonInspection => ({ ok: false, path, message });
+
+const inspectJson = (value: unknown, path: string, ancestors: Set<object>): ProjectFormatJsonInspection => {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return { ok: true };
   if (typeof value === 'number') {
-    if (!Number.isFinite(value)) throw new TypeError(`Cannot canonicalize non-finite number at ${path}.`);
-    return JSON.stringify(value);
+    return Number.isFinite(value) ? { ok: true } : invalid(path, 'Non-finite numbers are not JSON-serializable.');
   }
+  if (typeof value !== 'object') return invalid(path, 'Only JSON primitive values, arrays, and plain objects are serializable.');
+  if (ancestors.has(value)) return invalid(path, 'Circular values are not JSON-serializable.');
+
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      for (const key of Reflect.ownKeys(value)) {
+        if (key === 'length') continue;
+        if (typeof key !== 'string' || !isArrayIndex(key, value.length)) {
+          return invalid(path, 'Sparse arrays and arrays with non-index properties are not JSON-serializable.');
+        }
+      }
+      for (let index = 0; index < value.length; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (!descriptor) return invalid(`${path}[${index}]`, 'Sparse arrays are not JSON-serializable.');
+        if (!descriptor.enumerable || !('value' in descriptor)) {
+          return invalid(`${path}[${index}]`, 'Array accessors are not JSON-serializable.');
+        }
+        const child = inspectJson(descriptor.value, `${path}[${index}]`, ancestors);
+        if (!child.ok) return child;
+      }
+      return { ok: true };
+    }
+
+    if (!isPlainObject(value)) return invalid(path, 'Only plain JSON objects are serializable.');
+    for (const key of Reflect.ownKeys(value)) {
+      if (typeof key !== 'string') return invalid(path, 'Symbol object keys are not JSON-serializable.');
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
+        return invalid(`${path}.${key}`, 'Object accessors and non-enumerable fields are not JSON-serializable.');
+      }
+      const child = inspectJson(descriptor.value, `${path}.${key}`, ancestors);
+      if (!child.ok) return child;
+    }
+    return { ok: true };
+  } finally {
+    ancestors.delete(value);
+  }
+};
+
+/** Inspects JSON representability without invoking getters or silently dropping values. */
+export const inspectProjectFormatJson = (value: unknown): ProjectFormatJsonInspection => {
+  try {
+    return inspectJson(value, '$', new Set());
+  } catch {
+    return invalid('$', 'Value cannot be safely inspected as JSON.');
+  }
+};
+
+const canonicalizeValidated = (value: unknown, path: string): string => {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number') return JSON.stringify(value);
   if (Array.isArray(value)) {
-    return `[${value.map((item, index) => canonicalize(item, `${path}[${index}]`)).join(',')}]`;
+    return `[${value.map((item, index) => canonicalizeValidated(item, `${path}[${index}]`)).join(',')}]`;
   }
-  if (isPlainObject(value)) {
-    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalize(value[key], `${path}.${key}`)}`).join(',')}}`;
-  }
-  throw new TypeError(`Cannot canonicalize non-JSON value at ${path}.`);
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalizeValidated(record[key], `${path}.${key}`)}`).join(',')}}`;
 };
 
 /** Stable JSON serialization used for manifests and reproducible SHA-256 inputs. */
-export const canonicalizeProjectFormatJson = (value: unknown): string => canonicalize(value, '$');
+export const canonicalizeProjectFormatJson = (value: unknown): string => {
+  const inspection = inspectProjectFormatJson(value);
+  if (!inspection.ok) throw new TypeError(`${inspection.message} (${inspection.path})`);
+  return canonicalizeValidated(value, '$');
+};
 
 /** SHA-256 over exact bytes. Callers choose whether those bytes are raw files or canonical JSON. */
 export const createProjectFormatSha256 = async (bytes: Uint8Array): Promise<string> => {

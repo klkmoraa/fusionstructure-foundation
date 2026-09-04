@@ -22,10 +22,14 @@ export {
   type ProjectFormatValidationReport,
   type SerializedProjectFormatPackage,
 } from './contract';
-export { canonicalizeProjectFormatJson, createProjectFormatSha256 } from './canonical';
+export {
+  canonicalizeProjectFormatJson,
+  createProjectFormatSha256,
+  inspectProjectFormatJson,
+  type ProjectFormatJsonInspection,
+} from './canonical';
 export {
   LEGACY_FSTRUCTURE_PORTABLE_FORMAT_VERSION,
-  LEGACY_FSTRUCTURE_PORTABLE_PAYLOAD_MIME,
   inspectLegacyFStructurePortable,
   type LegacyFStructurePortableInspection,
 } from './legacy2d';

@@ -3,7 +3,6 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   LEGACY_FSTRUCTURE_PORTABLE_FORMAT_VERSION,
-  LEGACY_FSTRUCTURE_PORTABLE_PAYLOAD_MIME,
   PROJECT_FORMAT_MEDIA_TYPE,
   PROJECT_FORMAT_SCHEMA_MEDIA_TYPE,
   PROJECT_FORMAT_VERSION,
@@ -20,13 +19,29 @@ import {
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
+const readProjectFormatSchema = () => {
+  const schemaPath = resolve(import.meta.dirname, '..', '..', 'schemas', 'project-format-0.1.schema.json');
+  return JSON.parse(readFileSync(schemaPath, 'utf8')) as {
+    $schema: string;
+    properties: Record<string, unknown>;
+    required: string[];
+    $defs: {
+      packagePath: { pattern: string };
+      timestamp: { pattern: string };
+      dependency: { required: string[] };
+    };
+  };
+};
+
 const makeFixture = async () => {
   const payloadBytes = encoder.encode('{"domain":"kept outside the manifest"}');
   const assetBytes = new Uint8Array([0, 1, 2, 3, 255]);
+  const dependencyBytes = encoder.encode('{"contract":"neutral"}');
   const unknownExtensionBytes = new Uint8Array([0, 255, 10, 13, 10, 42]);
   const files = new Map<string, Uint8Array>([
     ['payloads/analysis-reference.json', payloadBytes],
     ['assets/thumbnail.bin', assetBytes],
+    ['dependencies/neutral-contract.json', dependencyBytes],
     ['extensions/vendor.opaque', unknownExtensionBytes],
   ]);
 
@@ -59,7 +74,8 @@ const makeFixture = async () => {
       id: 'neutral-contract',
       mediaType: 'application/json',
       version: '0.1.0',
-      sha256: await createProjectFormatSha256(encoder.encode('{"contract":"neutral"}')),
+      sha256: await createProjectFormatSha256(dependencyBytes),
+      path: 'dependencies/neutral-contract.json',
       uri: 'urn:example:neutral-contract:0.1',
     }],
     revisions: {
@@ -104,6 +120,7 @@ describe('neutral project-format v0.1', () => {
       .toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
     expect(await createProjectFormatSha256(encoder.encode(canonicalizeProjectFormatJson(unordered))))
       .toBe(await createProjectFormatSha256(encoder.encode(canonicalizeProjectFormatJson(ordered))));
+    expect(() => canonicalizeProjectFormatJson(new Array(1))).toThrow(/sparse/i);
   });
 
   it('preserves opaque extension bytes through validated read/write without embedding domain models', async () => {
@@ -173,30 +190,131 @@ describe('neutral project-format v0.1', () => {
     expect(downgrade.ok).toBe(false);
     expect(downgrade.report.issues.map((issue) => issue.code)).toContain('unsupported-destructive-downgrade');
 
-    expect(LEGACY_FSTRUCTURE_PORTABLE_PAYLOAD_MIME).toBe('application/vnd.fusionstructure.project+json');
     expect(LEGACY_FSTRUCTURE_PORTABLE_FORMAT_VERSION).toBe(1);
-    expect(LEGACY_FSTRUCTURE_PORTABLE_PAYLOAD_MIME).not.toBe(PROJECT_FORMAT_MEDIA_TYPE);
     expect(inspectLegacyFStructurePortable({
-      mediaType: LEGACY_FSTRUCTURE_PORTABLE_PAYLOAD_MIME,
+      format: 'fusionstructure-portable',
       formatVersion: LEGACY_FSTRUCTURE_PORTABLE_FORMAT_VERSION,
     })).toEqual({
       kind: 'legacy-2d-portable',
       migration: 'external-adapter-required',
     });
+    expect(inspectLegacyFStructurePortable({
+      format: 'structureco-portable',
+      formatVersion: LEGACY_FSTRUCTURE_PORTABLE_FORMAT_VERSION,
+    })).toEqual({
+      kind: 'legacy-2d-portable',
+      migration: 'external-adapter-required',
+    });
+    expect(inspectLegacyFStructurePortable({
+      mediaType: PROJECT_FORMAT_MEDIA_TYPE,
+      formatVersion: LEGACY_FSTRUCTURE_PORTABLE_FORMAT_VERSION,
+    })).toBeUndefined();
+    expect(inspectLegacyFStructurePortable({
+      format: 'fusionstructure-bundle',
+      formatVersion: LEGACY_FSTRUCTURE_PORTABLE_FORMAT_VERSION,
+    })).toBeUndefined();
+  });
+
+  it('keeps schema and runtime path/timestamp rejection in parity', async () => {
+    const { manifest } = await makeFixture();
+    const schema = readProjectFormatSchema();
+    const schemaPath = new RegExp(schema.$defs.packagePath.pattern, 'u');
+    const schemaTimestamp = new RegExp(schema.$defs.timestamp.pattern, 'u');
+    const cases = [
+      ['canonical relative path and UTC timestamp', 'payloads/reference.json', '2026-09-03T00:00:00.000Z', true],
+      ['UTC timestamp without fractional seconds', 'payloads/reference.json', '2026-09-03T00:00:00Z', true],
+      ['leading path whitespace', ' payloads/reference.json', '2026-09-03T00:00:00.000Z', false],
+      ['trailing path whitespace', 'payloads/reference.json ', '2026-09-03T00:00:00.000Z', false],
+      ['duplicate path separator', 'payloads//reference.json', '2026-09-03T00:00:00.000Z', false],
+      ['drive path', 'C:/payloads/reference.json', '2026-09-03T00:00:00.000Z', false],
+      ['backslash path', 'payloads\\reference.json', '2026-09-03T00:00:00.000Z', false],
+      ['control path', `payloads/${String.fromCharCode(0)}reference.json`, '2026-09-03T00:00:00.000Z', false],
+      ['traversal path', 'payloads/../reference.json', '2026-09-03T00:00:00.000Z', false],
+      ['non-UTC timestamp', 'payloads/reference.json', '2026-09-03T00:00:00.000+00:00', false],
+      ['non-ISO timestamp', 'payloads/reference.json', '2026-09-03 00:00:00.000Z', false],
+      ['invalid month timestamp', 'payloads/reference.json', '2026-13-03T00:00:00.000Z', false],
+      ['invalid calendar day timestamp', 'payloads/reference.json', '2026-02-31T00:00:00.000Z', false],
+      ['leap day timestamp', 'payloads/reference.json', '2024-02-29T00:00:00.000Z', true],
+    ] as const;
+
+    for (const [_label, path, timestamp, accepted] of cases) {
+      const candidate = {
+        ...manifest,
+        project: { ...manifest.project, createdAt: timestamp, updatedAt: timestamp },
+        revisions: {
+          ...manifest.revisions,
+          entries: manifest.revisions.entries.map((entry) => ({ ...entry, createdAt: timestamp })),
+        },
+        payloads: [{ ...manifest.payloads[0], path }],
+      };
+      expect(schemaPath.test(path) && schemaTimestamp.test(timestamp)).toBe(accepted);
+      expect(validateProjectFormatManifest(candidate).ok).toBe(accepted);
+    }
+  });
+
+  it('rejects URI-only dependencies rather than pretending their hashes were verified', async () => {
+    const { files, manifest } = await makeFixture();
+    const uriOnlyManifest = {
+      ...manifest,
+      dependencies: [{
+        id: manifest.dependencies[0].id,
+        mediaType: manifest.dependencies[0].mediaType,
+        version: manifest.dependencies[0].version,
+        sha256: manifest.dependencies[0].sha256,
+        uri: 'urn:example:neutral-contract:0.1',
+      }],
+    };
+    const report = validateProjectFormatManifest(uriOnlyManifest);
+    expect(report.ok).toBe(false);
+    expect(report.issues.map((issue) => issue.code)).toContain('unverifiable-dependency');
+
+    const written = await writeProjectFormatPackage({ manifest: uriOnlyManifest, files });
+    expect(written.ok).toBe(false);
+    expect(written.report.issues.map((issue) => issue.code)).toContain('unverifiable-dependency');
+
+    const missingDependencyBytes = new Map(files);
+    missingDependencyBytes.delete('dependencies/neutral-contract.json');
+    const missingBytes = await writeProjectFormatPackage({ manifest, files: missingDependencyBytes });
+    expect(missingBytes.ok).toBe(false);
+    expect(missingBytes.report.issues.map((issue) => issue.code)).toContain('missing-file');
+  });
+
+  it('returns structured reports for sparse arrays before serialization or migration', async () => {
+    const { files, manifest } = await makeFixture();
+    const sparseManifest = {
+      ...manifest,
+      payloads: new Array(1),
+    };
+    const report = validateProjectFormatManifest(sparseManifest);
+    expect(report.ok).toBe(false);
+    expect(report.issues.map((issue) => issue.code)).toContain('non-serializable-json');
+
+    expect(() => migrateProjectFormatManifest(sparseManifest, PROJECT_FORMAT_VERSION)).not.toThrow();
+    const migration = migrateProjectFormatManifest(sparseManifest, PROJECT_FORMAT_VERSION);
+    expect(migration.ok).toBe(false);
+    expect(migration.report.issues.map((issue) => issue.code)).toContain('non-serializable-json');
+
+    const written = await writeProjectFormatPackage({ manifest: sparseManifest, files });
+    expect(written.ok).toBe(false);
+    expect(written.report.issues.map((issue) => issue.code)).toContain('non-serializable-json');
+
+    const functionManifest = {
+      ...manifest,
+      producer: { ...manifest.producer, version: () => 'not-json' },
+    };
+    const functionReport = validateProjectFormatManifest(functionManifest);
+    expect(functionReport.ok).toBe(false);
+    expect(functionReport.issues.map((issue) => issue.code)).toContain('non-serializable-json');
   });
 
   it('ships a Draft 2020-12 schema artifact matching the executable envelope', () => {
-    const schemaPath = resolve(import.meta.dirname, '..', '..', 'schemas', 'project-format-0.1.schema.json');
-    const schema = JSON.parse(readFileSync(schemaPath, 'utf8')) as {
-      $schema: string;
-      properties: Record<string, unknown>;
-      required: string[];
-    };
+    const schema = readProjectFormatSchema();
 
     expect(schema.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
     expect(schema.properties.formatVersion).toBeDefined();
     expect(schema.required).toEqual(expect.arrayContaining([
       'project', 'defaultUnits', 'coordinateContexts', 'producer', 'schema', 'dependencies', 'revisions', 'payloads', 'assets', 'extensions',
     ]));
+    expect(schema.$defs.dependency.required).toContain('path');
   });
 });

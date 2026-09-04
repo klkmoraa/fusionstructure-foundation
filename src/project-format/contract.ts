@@ -39,8 +39,10 @@ export interface ProjectFormatDependency {
   readonly mediaType: string;
   readonly version: string;
   readonly sha256: string;
+  /** Local bytes are mandatory so package verification never needs a network fetch. */
+  readonly path: string;
+  /** Optional locator retained for provenance or later resolution outside this boundary. */
   readonly uri?: string;
-  readonly path?: string;
 }
 
 export interface ProjectFormatRevisionEntry {
@@ -104,10 +106,12 @@ export type ProjectFormatValidationCode =
   | 'malformed-package'
   | 'missing-file'
   | 'missing-required-field'
+  | 'non-serializable-json'
   | 'sha256-mismatch'
   | 'unsafe-path'
   | 'unknown-manifest-field'
   | 'unreferenced-file'
+  | 'unverifiable-dependency'
   | 'unsupported-destructive-downgrade'
   | 'unsupported-format-version'
   | 'unsupported-target-version';

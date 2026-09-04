@@ -1,4 +1,4 @@
-import { canonicalizeProjectFormatJson, createProjectFormatSha256 } from './canonical';
+import { canonicalizeProjectFormatJson, createProjectFormatSha256, inspectProjectFormatJson } from './canonical';
 import {
   PROJECT_FORMAT_MEDIA_TYPE,
   PROJECT_FORMAT_SCHEMA_MEDIA_TYPE,
@@ -32,7 +32,7 @@ const EMBEDDED_DOMAIN_FIELDS = new Set(['model', 'models', 'projectModel', 'spac
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const MEDIA_TYPE = /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/;
-const ISO_UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+const ISO_UTC_TIMESTAMP = /^(?:\d{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12]\d|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12]\d|30)|02-(?:0[1-9]|1\d|2[0-8]))|(?:\d{2}(?:0[48]|[2468][048]|[13579][26])|(?:0[48]|[2468][048]|[13579][26])00|0000)-02-29)T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{3})?Z$/;
 
 const isRecord = (value: unknown): value is JsonRecord => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
@@ -96,7 +96,11 @@ const readMediaType = (value: unknown, path: string, issues: ProjectFormatValida
 
 const readTimestamp = (value: unknown, path: string, issues: ProjectFormatValidationIssue[]): string | undefined => {
   const timestamp = readNonEmptyString(value, path, issues);
-  if (timestamp !== undefined && (!ISO_UTC_TIMESTAMP.test(timestamp) || Number.isNaN(Date.parse(timestamp)))) {
+  const normalizedTimestamp = timestamp?.includes('.') ? timestamp : timestamp?.replace(/Z$/, '.000Z');
+  if (
+    timestamp !== undefined
+    && (!ISO_UTC_TIMESTAMP.test(timestamp) || normalizedTimestamp === undefined || Number.isNaN(Date.parse(normalizedTimestamp)) || new Date(normalizedTimestamp).toISOString() !== normalizedTimestamp)
+  ) {
     issues.push(createIssue('invalid-field', path, 'Expected an ISO-8601 UTC timestamp.'));
     return undefined;
   }
@@ -105,7 +109,7 @@ const readTimestamp = (value: unknown, path: string, issues: ProjectFormatValida
 
 const isSafeProjectFormatPath = (value: string): boolean => {
   if (value.length === 0 || value !== value.trim()) return false;
-  if (value.startsWith('/') || value.startsWith('\\') || value.includes('\\') || value.includes(':')) return false;
+  if (value.startsWith('/') || value.startsWith('\\') || value.includes('\\') || value.includes(':') || value.includes('//')) return false;
   if (/[\u0000-\u001F\u007F]/.test(value)) return false;
   const segments = value.split('/');
   return segments.every((segment) => segment.length > 0 && segment !== '.' && segment !== '..');
@@ -255,16 +259,14 @@ const validateDependencies = (values: readonly unknown[] | undefined, issues: Pr
     readNonEmptyString(requireField(candidate, 'version', path, issues), `${path}.version`, issues);
     readSha256(requireField(candidate, 'sha256', path, issues), `${path}.sha256`, issues);
 
-    const hasUri = hasOwn(candidate, 'uri');
     const hasPath = hasOwn(candidate, 'path');
-    if (!hasUri && !hasPath) {
-      issues.push(createIssue('missing-required-field', path, 'A dependency must declare a URI or a package path.'));
-    }
-    if (hasUri) readNonEmptyString(candidate.uri, `${path}.uri`, issues);
-    if (hasPath) {
+    if (!hasPath) {
+      issues.push(createIssue('unverifiable-dependency', `${path}.path`, 'A dependency needs local package bytes at path; a URI is not fetched for SHA-256 verification.'));
+    } else {
       const dependencyPath = readPath(candidate.path, `${path}.path`, issues);
       registerPath(dependencyPath, `${path}.path`, registry, issues);
     }
+    if (hasOwn(candidate, 'uri')) readNonEmptyString(candidate.uri, `${path}.uri`, issues);
   });
 };
 
@@ -372,7 +374,7 @@ const validateExtensions = (values: readonly unknown[] | undefined, issues: Proj
 };
 
 /** Validates only the neutral envelope; referenced domain files are not parsed or interpreted. */
-export const validateProjectFormatManifest = (value: unknown): ProjectFormatValidationReport => {
+const validateProjectFormatManifestContents = (value: unknown): ProjectFormatValidationReport => {
   const issues: ProjectFormatValidationIssue[] = [];
   if (!isRecord(value)) return createReport([createIssue('malformed-manifest', '$', 'Expected a JSON object manifest.')]);
 
@@ -406,11 +408,23 @@ export const validateProjectFormatManifest = (value: unknown): ProjectFormatVali
   return createReport(issues);
 };
 
+export const validateProjectFormatManifest = (value: unknown): ProjectFormatValidationReport => {
+  try {
+    const inspection = inspectProjectFormatJson(value);
+    if (!inspection.ok) {
+      return createReport([createIssue('non-serializable-json', inspection.path, inspection.message)]);
+    }
+    return validateProjectFormatManifestContents(value);
+  } catch {
+    return createReport([createIssue('malformed-manifest', '$', 'Manifest could not be safely inspected.')]);
+  }
+};
+
 const getHashedFileReferences = (manifest: ProjectFormatManifest): readonly HashedFileReference[] => [
   ...manifest.payloads,
   ...manifest.assets,
   ...manifest.extensions,
-  ...manifest.dependencies.filter((dependency): dependency is typeof dependency & { readonly path: string } => dependency.path !== undefined),
+  ...manifest.dependencies,
 ].map((descriptor) => ({ path: descriptor.path, sha256: descriptor.sha256 }));
 
 const isNativeFileMap = (value: unknown): value is ReadonlyMap<string, Uint8Array> => value instanceof Map;
@@ -423,16 +437,20 @@ const cloneFiles = (files: ReadonlyMap<string, Uint8Array>): Map<string, Uint8Ar
 
 /** Takes the byte snapshot used by read/write before any asynchronous hash work. */
 const snapshotFiles = (value: unknown): ProjectFormatOperationResult<Map<string, Uint8Array>> => {
-  if (!isNativeFileMap(value)) {
-    return failure([createIssue('malformed-package', '$.files', 'Expected a Map of package paths to Uint8Array bytes.')]);
+  try {
+    if (!isNativeFileMap(value)) {
+      return failure([createIssue('malformed-package', '$.files', 'Expected a Map of package paths to Uint8Array bytes.')]);
+    }
+    const issues: ProjectFormatValidationIssue[] = [];
+    for (const [path, bytes] of value) {
+      if (typeof path !== 'string') issues.push(createIssue('malformed-package', '$.files', 'Package file paths must be strings.'));
+      if (!(bytes instanceof Uint8Array)) issues.push(createIssue('malformed-package', '$.files', 'Package file content must be Uint8Array bytes.'));
+    }
+    if (issues.length > 0) return failure(issues);
+    return success(cloneFiles(value));
+  } catch {
+    return failure([createIssue('malformed-package', '$.files', 'Package files could not be safely copied.')]);
   }
-  const issues: ProjectFormatValidationIssue[] = [];
-  for (const [path, bytes] of value) {
-    if (typeof path !== 'string') issues.push(createIssue('malformed-package', '$.files', 'Package file paths must be strings.'));
-    if (!(bytes instanceof Uint8Array)) issues.push(createIssue('malformed-package', '$.files', 'Package file content must be Uint8Array bytes.'));
-  }
-  if (issues.length > 0) return failure(issues);
-  return success(cloneFiles(value));
 };
 
 const validateFiles = async (manifest: ProjectFormatManifest, files: ReadonlyMap<string, Uint8Array>): Promise<ProjectFormatValidationReport> => {
@@ -476,10 +494,14 @@ const validateFiles = async (manifest: ProjectFormatManifest, files: ReadonlyMap
 
 /** Validates a manifest plus its raw referenced files without parsing domain payload content. */
 export const validateProjectFormatPackage = async (manifest: unknown, files: unknown): Promise<ProjectFormatValidationReport> => {
-  const manifestReport = validateProjectFormatManifest(manifest);
-  if (!manifestReport.ok) return manifestReport;
-  if (!isNativeFileMap(files)) return createReport([createIssue('malformed-package', '$.files', 'Expected a Map of package paths to Uint8Array bytes.')]);
-  return validateFiles(manifest as ProjectFormatManifest, files);
+  try {
+    const manifestReport = validateProjectFormatManifest(manifest);
+    if (!manifestReport.ok) return manifestReport;
+    if (!isNativeFileMap(files)) return createReport([createIssue('malformed-package', '$.files', 'Expected a Map of package paths to Uint8Array bytes.')]);
+    return await validateFiles(manifest as ProjectFormatManifest, files);
+  } catch {
+    return createReport([createIssue('malformed-package', '$', 'Package could not be safely validated.')]);
+  }
 };
 
 /**
@@ -487,21 +509,29 @@ export const validateProjectFormatPackage = async (manifest: unknown, files: unk
  * interprets opaque extensions nor opens ZIP archives.
  */
 export const readProjectFormatPackage = async (manifestBytes: unknown, files: unknown): Promise<ProjectFormatOperationResult<ProjectFormatPackage>> => {
-  if (!(manifestBytes instanceof Uint8Array)) {
-    return failure([createIssue('malformed-manifest', '$', 'Manifest bytes must be Uint8Array.')]);
-  }
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes));
+    if (!(manifestBytes instanceof Uint8Array)) {
+      return failure([createIssue('malformed-manifest', '$', 'Manifest bytes must be Uint8Array.')]);
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes));
+    } catch {
+      return failure([createIssue('malformed-manifest', '$', 'Manifest bytes must contain valid UTF-8 JSON.')]);
+    }
+    const fileSnapshot = snapshotFiles(files);
+    if (!fileSnapshot.ok) return failure(fileSnapshot.report.issues);
+    const report = await validateProjectFormatPackage(parsed, fileSnapshot.value);
+    if (!report.ok) return failure(report.issues);
+    try {
+      const canonicalManifest = JSON.parse(canonicalizeProjectFormatJson(parsed)) as ProjectFormatManifest;
+      return success({ manifest: canonicalManifest, files: fileSnapshot.value });
+    } catch {
+      return failure([createIssue('non-serializable-json', '$', 'Manifest cannot be canonicalized as JSON.')]);
+    }
   } catch {
-    return failure([createIssue('malformed-manifest', '$', 'Manifest bytes must contain valid UTF-8 JSON.')]);
+    return failure([createIssue('malformed-package', '$', 'Package could not be safely read.')]);
   }
-  const fileSnapshot = snapshotFiles(files);
-  if (!fileSnapshot.ok) return failure(fileSnapshot.report.issues);
-  const report = await validateProjectFormatPackage(parsed, fileSnapshot.value);
-  if (!report.ok) return failure(report.issues);
-  const canonicalManifest = JSON.parse(canonicalizeProjectFormatJson(parsed)) as ProjectFormatManifest;
-  return success({ manifest: canonicalManifest, files: fileSnapshot.value });
 };
 
 /**
@@ -509,25 +539,31 @@ export const readProjectFormatPackage = async (manifestBytes: unknown, files: un
  * final temp-file/replace step so read-only targets can fall back safely.
  */
 export const writeProjectFormatPackage = async (value: unknown): Promise<ProjectFormatOperationResult<SerializedProjectFormatPackage>> => {
-  if (!isRecord(value) || !Object.prototype.hasOwnProperty.call(value, 'manifest') || !Object.prototype.hasOwnProperty.call(value, 'files')) {
-    return failure([createIssue('malformed-package', '$', 'Expected a manifest and a Map of package files.')]);
-  }
-  let manifestText: string;
-  let manifestSnapshot: unknown;
   try {
-    manifestText = canonicalizeProjectFormatJson(value.manifest);
-    manifestSnapshot = JSON.parse(manifestText);
+    if (!isRecord(value) || !Object.prototype.hasOwnProperty.call(value, 'manifest') || !Object.prototype.hasOwnProperty.call(value, 'files')) {
+      return failure([createIssue('malformed-package', '$', 'Expected a manifest and a Map of package files.')]);
+    }
+    const manifestReport = validateProjectFormatManifest(value.manifest);
+    if (!manifestReport.ok) return failure(manifestReport.issues);
+    let manifestText: string;
+    let manifestSnapshot: unknown;
+    try {
+      manifestText = canonicalizeProjectFormatJson(value.manifest);
+      manifestSnapshot = JSON.parse(manifestText);
+    } catch {
+      return failure([createIssue('non-serializable-json', '$', 'Manifest cannot be canonicalized as JSON.')]);
+    }
+    const fileSnapshot = snapshotFiles(value.files);
+    if (!fileSnapshot.ok) return failure(fileSnapshot.report.issues);
+    const report = await validateProjectFormatPackage(manifestSnapshot, fileSnapshot.value);
+    if (!report.ok) return failure(report.issues);
+    return success({
+      manifestBytes: new TextEncoder().encode(manifestText),
+      files: fileSnapshot.value,
+    });
   } catch {
-    return failure([createIssue('malformed-manifest', '$', 'Manifest cannot be canonicalized as JSON.')]);
+    return failure([createIssue('malformed-package', '$', 'Package could not be safely written.')]);
   }
-  const fileSnapshot = snapshotFiles(value.files);
-  if (!fileSnapshot.ok) return failure(fileSnapshot.report.issues);
-  const report = await validateProjectFormatPackage(manifestSnapshot, fileSnapshot.value);
-  if (!report.ok) return failure(report.issues);
-  return success({
-    manifestBytes: new TextEncoder().encode(manifestText),
-    files: fileSnapshot.value,
-  });
 };
 
 const compareFormatVersions = (left: string, right: string): number | undefined => {
@@ -542,12 +578,20 @@ const compareFormatVersions = (left: string, right: string): number | undefined 
 
 /** Current v0.1 has no destructive downgrade path; callers must use an explicit external adapter. */
 export const migrateProjectFormatManifest = (manifest: unknown, targetVersion: string): ProjectFormatOperationResult<ProjectFormatManifest> => {
-  const report = validateProjectFormatManifest(manifest);
-  if (!report.ok) return failure(report.issues);
-  if (targetVersion !== PROJECT_FORMAT_VERSION) {
-    const comparison = compareFormatVersions(targetVersion, PROJECT_FORMAT_VERSION);
-    const code = comparison !== undefined && comparison < 0 ? 'unsupported-destructive-downgrade' : 'unsupported-target-version';
-    return failure([createIssue(code, '$.formatVersion', `Project format ${PROJECT_FORMAT_VERSION} cannot be migrated to ${targetVersion}.`)]);
+  try {
+    const report = validateProjectFormatManifest(manifest);
+    if (!report.ok) return failure(report.issues);
+    if (targetVersion !== PROJECT_FORMAT_VERSION) {
+      const comparison = compareFormatVersions(targetVersion, PROJECT_FORMAT_VERSION);
+      const code = comparison !== undefined && comparison < 0 ? 'unsupported-destructive-downgrade' : 'unsupported-target-version';
+      return failure([createIssue(code, '$.formatVersion', `Project format ${PROJECT_FORMAT_VERSION} cannot be migrated to ${targetVersion}.`)]);
+    }
+    try {
+      return success(JSON.parse(canonicalizeProjectFormatJson(manifest)) as ProjectFormatManifest);
+    } catch {
+      return failure([createIssue('non-serializable-json', '$', 'Manifest cannot be canonicalized as JSON.')]);
+    }
+  } catch {
+    return failure([createIssue('malformed-manifest', '$', 'Manifest could not be safely migrated.')]);
   }
-  return success(JSON.parse(canonicalizeProjectFormatJson(manifest)) as ProjectFormatManifest);
 };
