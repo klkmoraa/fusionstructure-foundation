@@ -161,6 +161,23 @@ describe('neutral project-format v0.1', () => {
     expect(canonical).toEqual({ ok: true, value: '{"a":1}' });
   });
 
+  it('does not lose object keys to an inherited array index setter', () => {
+    const originalIndexZero = Object.getOwnPropertyDescriptor(Array.prototype, '0');
+    let canonical: ReturnType<typeof canonicalizeProjectFormatJson> | undefined;
+    try {
+      Object.defineProperty(Array.prototype, '0', {
+        configurable: true,
+        set: () => undefined,
+      });
+      canonical = canonicalizeProjectFormatJson({ a: 1 });
+    } finally {
+      if (originalIndexZero) Object.defineProperty(Array.prototype, '0', originalIndexZero);
+      else Reflect.deleteProperty(Array.prototype, '0');
+    }
+
+    expect(canonical).toEqual({ ok: true, value: '{"a":1}' });
+  });
+
   it('returns structured canonicalization failures without throwing for non-JSON values', () => {
     const getterObject = {} as Record<string, unknown>;
     Object.defineProperty(getterObject, 'unsafe', { enumerable: true, get: () => 'not-read' });

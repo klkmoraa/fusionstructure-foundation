@@ -80,6 +80,69 @@ export const inspectProjectFormatJson = (value: unknown): ProjectFormatJsonInspe
   }
 };
 
+type KeyStorage = Record<string, string>;
+
+const createKeyStorage = (): KeyStorage => Object.create(null) as KeyStorage;
+
+const storeKey = (storage: KeyStorage, index: number, key: string): void => {
+  Object.defineProperty(storage, String(index), {
+    configurable: true,
+    enumerable: true,
+    value: key,
+    writable: true,
+  });
+};
+
+const readStoredKey = (storage: KeyStorage, index: number, path: string): string => {
+  const descriptor = Object.getOwnPropertyDescriptor(storage, String(index));
+  if (!descriptor || !('value' in descriptor) || typeof descriptor.value !== 'string') {
+    throw new TypeError(`Object changed while canonicalizing at ${path}.`);
+  }
+  return descriptor.value;
+};
+
+const sortStoredKeys = (storage: KeyStorage, keyCount: number, path: string): KeyStorage => {
+  let source = storage;
+  let target = createKeyStorage();
+  for (let width = 1; width < keyCount; width *= 2) {
+    const span = width * 2;
+    for (let rangeStart = 0; rangeStart < keyCount; rangeStart += span) {
+      const rangeMiddle = rangeStart + width < keyCount ? rangeStart + width : keyCount;
+      const rangeEnd = rangeStart + span < keyCount ? rangeStart + span : keyCount;
+      let leftIndex = rangeStart;
+      let rightIndex = rangeMiddle;
+      let writeIndex = rangeStart;
+
+      while (leftIndex < rangeMiddle && rightIndex < rangeEnd) {
+        const leftKey = readStoredKey(source, leftIndex, path);
+        const rightKey = readStoredKey(source, rightIndex, path);
+        if (leftKey <= rightKey) {
+          storeKey(target, writeIndex, leftKey);
+          leftIndex += 1;
+        } else {
+          storeKey(target, writeIndex, rightKey);
+          rightIndex += 1;
+        }
+        writeIndex += 1;
+      }
+      while (leftIndex < rangeMiddle) {
+        storeKey(target, writeIndex, readStoredKey(source, leftIndex, path));
+        leftIndex += 1;
+        writeIndex += 1;
+      }
+      while (rightIndex < rangeEnd) {
+        storeKey(target, writeIndex, readStoredKey(source, rightIndex, path));
+        rightIndex += 1;
+        writeIndex += 1;
+      }
+    }
+    const previousSource = source;
+    source = target;
+    target = previousSource;
+  }
+  return source;
+};
+
 const canonicalizeValidated = (value: unknown, path: string): string => {
   if (value === null || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number') return JSON.stringify(value);
   if (Array.isArray(value)) {
@@ -96,29 +159,17 @@ const canonicalizeValidated = (value: unknown, path: string): string => {
   }
   const record = value as Record<string, unknown>;
   const ownKeys = Reflect.ownKeys(record);
-  const sortedKeys: string[] = [];
+  const unsortedKeys = createKeyStorage();
   for (let index = 0; index < ownKeys.length; index += 1) {
     const key = ownKeys[index];
     if (typeof key !== 'string') throw new TypeError(`Object changed while canonicalizing at ${path}.`);
-    sortedKeys[index] = key;
+    storeKey(unsortedKeys, index, key);
   }
-  for (let index = 1; index < sortedKeys.length; index += 1) {
-    const key = sortedKeys[index];
-    if (key === undefined) throw new TypeError(`Object changed while canonicalizing at ${path}.`);
-    let insertionIndex = index - 1;
-    while (insertionIndex >= 0) {
-      const previousKey = sortedKeys[insertionIndex];
-      if (previousKey === undefined || previousKey <= key) break;
-      sortedKeys[insertionIndex + 1] = previousKey;
-      insertionIndex -= 1;
-    }
-    sortedKeys[insertionIndex + 1] = key;
-  }
+  const sortedKeys = sortStoredKeys(unsortedKeys, ownKeys.length, path);
 
   let canonical = '{';
-  for (let index = 0; index < sortedKeys.length; index += 1) {
-    const key = sortedKeys[index];
-    if (key === undefined) throw new TypeError(`Object changed while canonicalizing at ${path}.`);
+  for (let index = 0; index < ownKeys.length; index += 1) {
+    const key = readStoredKey(sortedKeys, index, path);
     const descriptor = Object.getOwnPropertyDescriptor(record, key);
     if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
       throw new TypeError(`Object changed while canonicalizing at ${path}.${key}.`);
