@@ -132,6 +132,21 @@ const nonSymmetricSparseCandidate = (): { matrix: Matrix; vector: number[] } => 
   return candidate;
 };
 
+const tinyScaleSparseCandidate = (): { matrix: Matrix; vector: number[] } => {
+  const candidate = sparseCompatibleSystem();
+  for (let index = 60; index < 120; index += 1) {
+    candidate.matrix[index][index] = 1e-12;
+    candidate.vector[index] = 1e-12;
+  }
+  return candidate;
+};
+
+const tinyScaleNonSymmetricSparseCandidate = (): { matrix: Matrix; vector: number[] } => {
+  const candidate = tinyScaleSparseCandidate();
+  candidate.matrix[60][61] = 9e-13;
+  return candidate;
+};
+
 describe('Foundation linear algebra public boundary', () => {
   it('declares a neutral public linear algebra module', () => {
     expect(existsSync(new URL('./linearAlgebra.ts', import.meta.url))).toBe(true);
@@ -241,6 +256,29 @@ describe('Foundation linear algebra public boundary', () => {
     expect(transposed[60]).toBeCloseTo(2, 12);
     expect(transposed[61]).toBeCloseTo(1, 12);
     expect(transposed).not.toEqual(direct);
+  });
+
+  it('keeps a symmetric tiny constrained free block eligible for the sparse path', () => {
+    const candidate = tinyScaleSparseCandidate();
+    const factorization = algebra.factorizeLinearSystem(candidate.matrix);
+
+    expect(factorization.diagnostics).toMatchObject({ backend: 'sparse-ldlt', dimension: 180, reducedDimension: 60 });
+    expect(factorization.solve(candidate.vector).slice(60, 120)).toEqual(Array(60).fill(1));
+  });
+
+  it('treats unilateral asymmetry relative to a tiny constrained free block as non-symmetric', () => {
+    const candidate = tinyScaleNonSymmetricSparseCandidate();
+    const automatic = algebra.factorizeLinearSystem(candidate.matrix);
+    const dense = algebra.factorizeLinearSystem(candidate.matrix, { backend: 'dense' });
+
+    expect(automatic.diagnostics).toMatchObject({
+      policy: 'auto',
+      backend: 'dense-lu',
+      fallbackReason: 'non-symmetric',
+      dimension: 180,
+    });
+    expect(automatic.solve(candidate.vector)).toEqual(dense.solve(candidate.vector));
+    expect(automatic.solveTranspose(candidate.vector)).toEqual(dense.solveTranspose(candidate.vector));
   });
 
   it('snapshots a constrained sparse system before later caller mutations', () => {

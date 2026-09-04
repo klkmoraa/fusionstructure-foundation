@@ -516,7 +516,8 @@ const isNumericallySymmetric = (matrix: Matrix): boolean => {
     for (let column = 0; column < row; column += 1) {
       const upper = matrix[column][row];
       const lower = matrix[row][column];
-      const scale = Math.max(1, Math.abs(upper), Math.abs(lower));
+      const scale = Math.max(Math.abs(upper), Math.abs(lower));
+      if (scale === 0) continue;
       if (Math.abs(upper - lower) > scale * LINEAR_ALGEBRA_TOLERANCES.negligibleRelative) return false;
     }
   }
