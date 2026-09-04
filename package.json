@@ -1,8 +1,8 @@
 {
   "name": "@fusionstructure/foundation",
-  "private": false,
+  "private": true,
   "version": "0.1.1",
-  "description": "Contratos neutrales de unidades, álgebra lineal, formato de proyecto y compatibilidad para FusionStructure.",
+  "description": "Archivo histórico de Foundation; no usar como dependencia runtime compartida.",
   "license": "MIT",
   "files": [
     "dist",

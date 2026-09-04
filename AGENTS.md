@@ -33,6 +33,13 @@ Antes de cerrar un cambio relevante:
 
 La ausencia de una prueba no es evidencia de que la función funcione.
 
+## Estado histórico
+
+- Este repositorio está retirado, preparado para archivo y `v0.1.1` es su último corte histórico.
+- No se publica ni se consume como dependencia runtime compartida.
+- El desarrollo de Foundation ocurre localmente en cada repositorio de producto.
+- No añadir nuevas capacidades: cualquier corrección excepcional debe limitarse a reproducibilidad o documentación histórica y conservar tags e historial.
+
 ## Dirección de producto
 
 El producto se organiza alrededor de un proyecto común. Las futuras superficies deben poder relacionarse con:

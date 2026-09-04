@@ -1,6 +1,8 @@
-# Extracción de Foundation
+# Extracción histórica de Foundation
 
-Este repositorio se separó con `git filter-repo` desde `klkmoraa/FusionStructure` usando el tag `monolith-cutover-20260904` como punto de corte. La primera etiqueta `v0.1.0` dejó la API raíz funcionando; `v0.1.1` corrige el empaquetado de las tres subrutas públicas y es la versión recomendada.
+> Este repositorio se archiva después de `v0.1.1`. No debe consumirse como dependencia. Cada producto conserva una Foundation mínima local y los contratos entre aplicaciones viajan como formatos versionados.
+
+Este repositorio se separó con `git filter-repo` desde `klkmoraa/FusionStructure` usando el tag `monolith-cutover-20260904` como punto de corte. La primera etiqueta `v0.1.0` dejó la API raíz funcionando; `v0.1.1` corrigió el empaquetado de las tres subrutas públicas y queda como último corte histórico.
 
 ## Incluido
 
