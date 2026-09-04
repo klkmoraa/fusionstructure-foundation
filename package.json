@@ -1,7 +1,7 @@
 {
   "name": "@fusionstructure/foundation",
   "private": false,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Contratos neutrales de unidades, álgebra lineal, formato de proyecto y compatibilidad para FusionStructure.",
   "license": "MIT",
   "files": [
@@ -13,9 +13,9 @@
   ],
   "exports": {
     ".": "./dist/index.js",
-    "./foundation": "./dist/foundation/index.js",
-    "./project-format": "./dist/project-format/index.js",
-    "./compatibility": "./dist/compatibilityArtifactDigest.js"
+    "./foundation": "./dist/foundation.js",
+    "./project-format": "./dist/project-format.js",
+    "./compatibility": "./dist/compatibility.js"
   },
   "type": "module",
   "scripts": {

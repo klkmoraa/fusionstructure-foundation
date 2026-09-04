@@ -1,6 +1,6 @@
 # `@fusionstructure/foundation`
 
-Foundation es el paquete neutral del ecosistema FusionStructure. Contiene contratos versionables, sin imports desde una aplicación, solver o superficie visual:
+Foundation es el paquete neutral del ecosistema FusionStructure. Contiene contratos versionables, sin imports desde una aplicación, solver o superficie visual. La versión estable del corte es `0.1.1`:
 
 - `@fusionstructure/foundation/foundation`: unidades canónicas y álgebra lineal.
 - `@fusionstructure/foundation/project-format`: envelope neutral v0.1, validación, hashing, migración no destructiva y preservación de extensiones opacas.

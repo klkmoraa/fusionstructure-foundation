@@ -3,9 +3,14 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   build: {
     lib: {
-      entry: 'src/index.ts',
+      entry: {
+        index: 'src/index.ts',
+        foundation: 'src/foundation/index.ts',
+        'project-format': 'src/project-format/index.ts',
+        compatibility: 'src/compatibilityArtifactDigest.ts',
+      },
       formats: ['es'],
-      fileName: 'index',
+      fileName: (_format, entryName) => `${entryName}.js`,
     },
     rollupOptions: {
       external: [/^node:/],
