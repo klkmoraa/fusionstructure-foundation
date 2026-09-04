@@ -138,6 +138,29 @@ describe('neutral project-format v0.1', () => {
     expect(canonicalizeProjectFormatJson(adversarialArray)).toEqual({ ok: true, value: '[1]' });
   });
 
+  it('canonicalizes object keys without invoking patched Array prototype methods', () => {
+    const originalMap = Object.getOwnPropertyDescriptor(Array.prototype, 'map');
+    const originalSort = Object.getOwnPropertyDescriptor(Array.prototype, 'sort');
+    const originalJoin = Object.getOwnPropertyDescriptor(Array.prototype, 'join');
+    if (!originalMap || !originalSort || !originalJoin) throw new Error('Array intrinsics must be available for this regression test.');
+
+    let canonical: ReturnType<typeof canonicalizeProjectFormatJson> | undefined;
+    try {
+      Object.defineProperties(Array.prototype, {
+        map: { configurable: true, writable: true, value: () => ['lost'] },
+        sort: { configurable: true, writable: true, value: () => [] },
+        join: { configurable: true, writable: true, value: () => 'lost' },
+      });
+      canonical = canonicalizeProjectFormatJson({ a: 1 });
+    } finally {
+      Object.defineProperty(Array.prototype, 'map', originalMap);
+      Object.defineProperty(Array.prototype, 'sort', originalSort);
+      Object.defineProperty(Array.prototype, 'join', originalJoin);
+    }
+
+    expect(canonical).toEqual({ ok: true, value: '{"a":1}' });
+  });
+
   it('returns structured canonicalization failures without throwing for non-JSON values', () => {
     const getterObject = {} as Record<string, unknown>;
     Object.defineProperty(getterObject, 'unsafe', { enumerable: true, get: () => 'not-read' });

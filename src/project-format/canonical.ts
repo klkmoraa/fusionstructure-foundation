@@ -95,7 +95,38 @@ const canonicalizeValidated = (value: unknown, path: string): string => {
     return `${canonical}]`;
   }
   const record = value as Record<string, unknown>;
-  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalizeValidated(record[key], `${path}.${key}`)}`).join(',')}}`;
+  const ownKeys = Reflect.ownKeys(record);
+  const sortedKeys: string[] = [];
+  for (let index = 0; index < ownKeys.length; index += 1) {
+    const key = ownKeys[index];
+    if (typeof key !== 'string') throw new TypeError(`Object changed while canonicalizing at ${path}.`);
+    sortedKeys[index] = key;
+  }
+  for (let index = 1; index < sortedKeys.length; index += 1) {
+    const key = sortedKeys[index];
+    if (key === undefined) throw new TypeError(`Object changed while canonicalizing at ${path}.`);
+    let insertionIndex = index - 1;
+    while (insertionIndex >= 0) {
+      const previousKey = sortedKeys[insertionIndex];
+      if (previousKey === undefined || previousKey <= key) break;
+      sortedKeys[insertionIndex + 1] = previousKey;
+      insertionIndex -= 1;
+    }
+    sortedKeys[insertionIndex + 1] = key;
+  }
+
+  let canonical = '{';
+  for (let index = 0; index < sortedKeys.length; index += 1) {
+    const key = sortedKeys[index];
+    if (key === undefined) throw new TypeError(`Object changed while canonicalizing at ${path}.`);
+    const descriptor = Object.getOwnPropertyDescriptor(record, key);
+    if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
+      throw new TypeError(`Object changed while canonicalizing at ${path}.${key}.`);
+    }
+    if (index > 0) canonical += ',';
+    canonical += `${JSON.stringify(key)}:${canonicalizeValidated(descriptor.value, `${path}.${key}`)}`;
+  }
+  return `${canonical}}`;
 };
 
 const canonicalizationFailure = (path: string, message: string): ProjectFormatCanonicalizationResult => ({
