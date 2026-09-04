@@ -126,6 +126,12 @@ const sparseCompatibleSystem = (): { matrix: Matrix; vector: number[] } => {
   return { matrix, vector };
 };
 
+const nonSymmetricSparseCandidate = (): { matrix: Matrix; vector: number[] } => {
+  const candidate = sparseCompatibleSystem();
+  candidate.matrix[60][61] = 1;
+  return candidate;
+};
+
 describe('Foundation linear algebra public boundary', () => {
   it('declares a neutral public linear algebra module', () => {
     expect(existsSync(new URL('./linearAlgebra.ts', import.meta.url))).toBe(true);
@@ -218,6 +224,40 @@ describe('Foundation linear algebra public boundary', () => {
     expect(sparse.solve(sparseCandidate.vector).slice(60, 120)).toEqual(Array(60).fill(2));
   });
 
+  it('falls back to dense LU for a non-symmetric large system and keeps transpose solving distinct', () => {
+    const candidate = nonSymmetricSparseCandidate();
+    const factorization = algebra.factorizeLinearSystem(candidate.matrix);
+    const direct = factorization.solve(candidate.vector);
+    const transposed = factorization.solveTranspose(candidate.vector);
+
+    expect(factorization.diagnostics).toMatchObject({
+      policy: 'auto',
+      backend: 'dense-lu',
+      fallbackReason: 'non-symmetric',
+      dimension: 180,
+    });
+    expect(direct[60]).toBeCloseTo(1, 12);
+    expect(direct[61]).toBeCloseTo(2, 12);
+    expect(transposed[60]).toBeCloseTo(2, 12);
+    expect(transposed[61]).toBeCloseTo(1, 12);
+    expect(transposed).not.toEqual(direct);
+  });
+
+  it('snapshots a constrained sparse system before later caller mutations', () => {
+    const candidate = sparseCompatibleSystem();
+    candidate.vector[120] = 1;
+    const factorization = algebra.factorizeLinearSystem(candidate.matrix);
+    const directBeforeMutation = factorization.solve(candidate.vector);
+    const transposeBeforeMutation = factorization.solveTranspose(candidate.vector);
+
+    expect(factorization.diagnostics).toMatchObject({ backend: 'sparse-ldlt', dimension: 180, reducedDimension: 60 });
+    candidate.matrix[60][0] = 1_000;
+    candidate.matrix[0][60] = 1_000;
+
+    expect(factorization.solve(candidate.vector)).toEqual(directBeforeMutation);
+    expect(factorization.solveTranspose(candidate.vector)).toEqual(transposeBeforeMutation);
+  });
+
   it('reports neutral structured errors for dimensions, non-finite values and singular pivots', () => {
     expectNumericalError(() => algebra.multiply([[1]], [[1], [2]]), 'dimension-mismatch');
     expectNumericalError(() => algebra.solveLinearSystem([], []), 'non-square-system');
@@ -228,6 +268,15 @@ describe('Foundation linear algebra public boundary', () => {
     expectNumericalError(() => algebra.factorizeLinearSystem([[1, 2], [2, 4]]), 'singular', 1);
     const factorization = algebra.factorizeLinearSystem([[1, 0], [0, 1]]);
     expectNumericalError(() => factorization.solve([1]), 'non-square-system');
+  });
+
+  it('rejects ragged matrices and mismatched vectors with classified numerical errors', () => {
+    expectNumericalError(() => algebra.transpose([[1, 2], [3]]), 'dimension-mismatch');
+    expectNumericalError(() => algebra.multiply([[1, 2], [3]], [[1], [2]]), 'dimension-mismatch');
+    expectNumericalError(() => algebra.multiplyMatrixVector([[1, 2], [3]], [1, 2]), 'dimension-mismatch');
+    expectNumericalError(() => algebra.multiplyMatrixVector([[1, 2]], [1]), 'dimension-mismatch');
+    expectNumericalError(() => algebra.factorizeLinearSystem([[1, 2], [3]]), 'non-square-system');
+    expectNumericalError(() => algebra.solveLinearSystem([[1, 0], [0, 1]], [1]), 'non-square-system');
   });
 
   it('publishes stable numerical tolerances and a null-space witness', () => {

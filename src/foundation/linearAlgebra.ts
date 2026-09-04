@@ -15,6 +15,7 @@ export type LinearSolverFallbackReason =
   | 'constraints-not-reducible'
   | 'reduced-system-below-threshold'
   | 'excessive-fill'
+  | 'non-symmetric'
   | 'non-positive-pivot';
 
 export interface LinearSolverDiagnostics {
@@ -85,19 +86,30 @@ export const LINEAR_ALGEBRA_TOLERANCES = Object.freeze({
   nullSpaceToleranceMultiplier: 32,
 });
 
+const assertRectangularMatrix = (matrix: Matrix): number => {
+  const columns = matrix[0]?.length ?? 0;
+  if (matrix.some((row) => row.length !== columns)) {
+    throw new LinearAlgebraError('dimension-mismatch');
+  }
+  return columns;
+};
+
 export const zeros = (rows: number, cols: number): Matrix =>
   Array.from({ length: rows }, () => Array(cols).fill(0));
 
 export const transpose = (a: Matrix): Matrix => {
+  assertRectangularMatrix(a);
   if (a.length === 0) return [];
   return a[0].map((_, j) => a.map((row) => row[j]));
 };
 
 export const multiply = (a: Matrix, b: Matrix): Matrix => {
-  if (!a.length || !b.length || a[0].length !== b.length) {
+  const aColumns = assertRectangularMatrix(a);
+  const bColumns = assertRectangularMatrix(b);
+  if (!a.length || !b.length || aColumns !== b.length) {
     throw new LinearAlgebraError('dimension-mismatch');
   }
-  const out = zeros(a.length, b[0].length);
+  const out = zeros(a.length, bColumns);
   for (let i = 0; i < a.length; i += 1) {
     for (let k = 0; k < b.length; k += 1) {
       const aik = a[i][k];
@@ -108,8 +120,11 @@ export const multiply = (a: Matrix, b: Matrix): Matrix => {
   return out;
 };
 
-export const multiplyMatrixVector = (a: Matrix, x: readonly number[]): number[] =>
-  a.map((row) => row.reduce((sum, value, index) => sum + value * x[index], 0));
+export const multiplyMatrixVector = (a: Matrix, x: readonly number[]): number[] => {
+  const columns = assertRectangularMatrix(a);
+  if (x.length !== columns) throw new LinearAlgebraError('dimension-mismatch');
+  return a.map((row) => row.reduce((sum, value, index) => sum + value * x[index], 0));
+};
 
 export const addToMatrix = (target: Matrix, source: Matrix, indices: number[]): void => {
   for (let i = 0; i < indices.length; i += 1) {
@@ -492,6 +507,23 @@ interface HybridSolverAttempt {
 }
 
 /**
+ * The sparse LDLT path factors a symmetric matrix and reuses its solve for the
+ * transpose. A relative comparison permits round-off scale differences without
+ * treating a genuinely non-symmetric operator as symmetric.
+ */
+const isNumericallySymmetric = (matrix: Matrix): boolean => {
+  for (let row = 1; row < matrix.length; row += 1) {
+    for (let column = 0; column < row; column += 1) {
+      const upper = matrix[column][row];
+      const lower = matrix[row][column];
+      const scale = Math.max(1, Math.abs(upper), Math.abs(lower));
+      if (Math.abs(upper - lower) > scale * LINEAR_ALGEBRA_TOLERANCES.negligibleRelative) return false;
+    }
+  }
+  return true;
+};
+
+/**
  * Eliminates directly fixed unknowns, factorizes the remaining block sparsely,
  * and exposes a solver over the original vector length. It returns null when
  * the fast path is inapplicable so dense LU retains its established behavior.
@@ -501,6 +533,7 @@ const attemptHybridSolver = (matrix: Matrix): HybridSolverAttempt => {
   if (n < LINEAR_ALGEBRA_TOLERANCES.sparseMinimumDimension) {
     return { solver: null, fallbackReason: 'below-size-threshold' };
   }
+  if (!isNumericallySymmetric(matrix)) return { solver: null, fallbackReason: 'non-symmetric' };
   const elimination = findSingleVariableConstraints(matrix);
   if (!elimination) return { solver: null, fallbackReason: 'constraints-not-reducible' };
   const { steps, keep } = elimination;
@@ -671,7 +704,8 @@ export const factorizeLinearSystem = (
   options: { backend?: LinearSolverPolicy } = {},
 ): LinearSystemFactorization => {
   assertSquareFiniteMatrix(matrix);
-  return buildValidatedFactorization(matrix, options).factorization;
+  const snapshot = matrix.map((row) => [...row]);
+  return buildValidatedFactorization(snapshot, options).factorization;
 };
 
 /**
