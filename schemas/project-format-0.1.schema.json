@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fusionstructure:project-format:0.1",
+  "title": "FusionStructure neutral project-format v0.1 envelope",
+  "description": "A neutral manifest that references independent payload files without embedding product, UI, 2D, or 3D models.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "mediaType",
+    "project",
+    "defaultUnits",
+    "coordinateContexts",
+    "producer",
+    "schema",
+    "dependencies",
+    "revisions",
+    "payloads",
+    "assets",
+    "extensions"
+  ],
+  "properties": {
+    "formatVersion": {
+      "const": "0.1"
+    },
+    "mediaType": {
+      "const": "application/vnd.fusionstructure.project-format+json"
+    },
+    "project": {
+      "$ref": "#/$defs/project"
+    },
+    "defaultUnits": {
+      "$ref": "#/$defs/defaultUnits"
+    },
+    "coordinateContexts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/coordinateContext"
+      }
+    },
+    "producer": {
+      "$ref": "#/$defs/producer"
+    },
+    "schema": {
+      "$ref": "#/$defs/schemaReference"
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dependency"
+      }
+    },
+    "revisions": {
+      "$ref": "#/$defs/revisions"
+    },
+    "payloads": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/payloadReference"
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/asset"
+      }
+    },
+    "extensions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/extension"
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "mediaType": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$"
+    },
+    "packagePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!\\s)(?!.*\\s$)(?!/)(?!.*\\\\)(?!.*:)(?!.*//)(?!.*(?:^|/)\\.\\.?/)(?!.*(?:^|/)\\.\\.?$)[^\\u0000-\\u001F\\u007F]+$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:\\d{4}-(?:(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12]\\d|3[01])|(?:04|06|09|11)-(?:0[1-9]|[12]\\d|30)|02-(?:0[1-9]|1\\d|2[0-8]))|(?:\\d{2}(?:0[48]|[2468][048]|[13579][26])|(?:0[48]|[2468][048]|[13579][26])00|0000)-02-29)T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d{3})?Z$"
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "createdAt": { "$ref": "#/$defs/timestamp" },
+        "updatedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "defaultUnits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["length", "force"],
+      "properties": {
+        "length": { "type": "string", "minLength": 1 },
+        "force": { "type": "string", "minLength": 1 }
+      }
+    },
+    "coordinateContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "handedness", "lengthUnit"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "handedness": { "enum": ["right-handed", "left-handed"] },
+        "lengthUnit": { "type": "string", "minLength": 1 }
+      }
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "schemaReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mediaType", "uri"],
+      "properties": {
+        "mediaType": { "const": "application/schema+json" },
+        "uri": { "const": "urn:fusionstructure:project-format:0.1" }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "mediaType", "version", "sha256", "path"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "mediaType": { "$ref": "#/$defs/mediaType" },
+        "version": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "uri": { "type": "string", "minLength": 1 },
+        "path": { "$ref": "#/$defs/packagePath" }
+      }
+    },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "createdAt", "summary"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "createdAt": { "$ref": "#/$defs/timestamp" },
+        "summary": { "type": "string", "minLength": 1 },
+        "parentId": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "revisions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currentRevisionId", "entries"],
+      "properties": {
+        "currentRevisionId": { "$ref": "#/$defs/identifier" },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/revision" }
+        }
+      }
+    },
+    "payloadReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "mediaType", "sha256"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "path": { "$ref": "#/$defs/packagePath" },
+        "mediaType": { "$ref": "#/$defs/mediaType" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "coordinateContextId": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "mediaType", "sha256"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "path": { "$ref": "#/$defs/packagePath" },
+        "mediaType": { "$ref": "#/$defs/mediaType" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "extension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "mediaType", "sha256", "required"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "path": { "$ref": "#/$defs/packagePath" },
+        "mediaType": { "$ref": "#/$defs/mediaType" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "required": { "type": "boolean" }
+      }
+    }
+  }
+}
