@@ -126,6 +126,18 @@ describe('neutral project-format v0.1', () => {
       .toBe(await createProjectFormatSha256(encoder.encode(orderedCanonical.value)));
   });
 
+  it('canonicalizes array items without invoking inherited adversarial methods', () => {
+    const adversarialArray = [1] as number[];
+    Object.setPrototypeOf(adversarialArray, {
+      map: () => ['999'],
+      forEach: () => { throw new Error('inherited forEach must not run'); },
+      reduce: () => { throw new Error('inherited reduce must not run'); },
+      [Symbol.iterator]: () => { throw new Error('inherited iterator must not run'); },
+    });
+
+    expect(canonicalizeProjectFormatJson(adversarialArray)).toEqual({ ok: true, value: '[1]' });
+  });
+
   it('returns structured canonicalization failures without throwing for non-JSON values', () => {
     const getterObject = {} as Record<string, unknown>;
     Object.defineProperty(getterObject, 'unsafe', { enumerable: true, get: () => 'not-read' });

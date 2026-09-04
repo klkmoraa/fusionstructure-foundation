@@ -83,7 +83,16 @@ export const inspectProjectFormatJson = (value: unknown): ProjectFormatJsonInspe
 const canonicalizeValidated = (value: unknown, path: string): string => {
   if (value === null || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number') return JSON.stringify(value);
   if (Array.isArray(value)) {
-    return `[${value.map((item, index) => canonicalizeValidated(item, `${path}[${index}]`)).join(',')}]`;
+    let canonical = '[';
+    for (let index = 0; index < value.length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
+        throw new TypeError(`Array changed while canonicalizing at ${path}[${index}].`);
+      }
+      if (index > 0) canonical += ',';
+      canonical += canonicalizeValidated(descriptor.value, `${path}[${index}]`);
+    }
+    return `${canonical}]`;
   }
   const record = value as Record<string, unknown>;
   return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalizeValidated(record[key], `${path}.${key}`)}`).join(',')}}`;
