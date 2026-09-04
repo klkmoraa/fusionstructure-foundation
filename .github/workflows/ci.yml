@@ -15,6 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # migration/evidenceValidation.test.ts reconstruye la evidencia del
+          # baseline y del tag anotado; los PR necesitan el historial completo
+          # para que el gate no dependa de cómo se disparó el workflow.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
