@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "migration:validate": "node scripts/validate-migration-evidence.mjs",
+    "migration:verify-governance": "node scripts/verify-current-github-governance.mjs",
     "typecheck": "tsc -b --noEmit",
     "preview": "vite preview",
     "pdf:reportlab": "node scripts/reportlab-launch.mjs",
