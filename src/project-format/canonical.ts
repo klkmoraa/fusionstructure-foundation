@@ -2,6 +2,16 @@ export type ProjectFormatJsonInspection =
   | { readonly ok: true }
   | { readonly ok: false; readonly path: string; readonly message: string };
 
+export interface ProjectFormatJsonIssue {
+  readonly code: 'non-serializable-json';
+  readonly path: string;
+  readonly message: string;
+}
+
+export type ProjectFormatCanonicalizationResult =
+  | { readonly ok: true; readonly value: string }
+  | { readonly ok: false; readonly issue: ProjectFormatJsonIssue };
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);
@@ -79,11 +89,20 @@ const canonicalizeValidated = (value: unknown, path: string): string => {
   return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalizeValidated(record[key], `${path}.${key}`)}`).join(',')}}`;
 };
 
-/** Stable JSON serialization used for manifests and reproducible SHA-256 inputs. */
-export const canonicalizeProjectFormatJson = (value: unknown): string => {
+const canonicalizationFailure = (path: string, message: string): ProjectFormatCanonicalizationResult => ({
+  ok: false,
+  issue: { code: 'non-serializable-json', path, message },
+});
+
+/** Stable JSON serialization with a structured result for manifests and reproducible SHA-256 inputs. */
+export const canonicalizeProjectFormatJson = (value: unknown): ProjectFormatCanonicalizationResult => {
   const inspection = inspectProjectFormatJson(value);
-  if (!inspection.ok) throw new TypeError(`${inspection.message} (${inspection.path})`);
-  return canonicalizeValidated(value, '$');
+  if (!inspection.ok) return canonicalizationFailure(inspection.path, inspection.message);
+  try {
+    return { ok: true, value: canonicalizeValidated(value, '$') };
+  } catch {
+    return canonicalizationFailure('$', 'Value cannot be safely canonicalized as JSON.');
+  }
 };
 
 /** SHA-256 over exact bytes. Callers choose whether those bytes are raw files or canonical JSON. */

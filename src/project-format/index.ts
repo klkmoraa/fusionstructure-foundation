@@ -26,7 +26,9 @@ export {
   canonicalizeProjectFormatJson,
   createProjectFormatSha256,
   inspectProjectFormatJson,
+  type ProjectFormatCanonicalizationResult,
   type ProjectFormatJsonInspection,
+  type ProjectFormatJsonIssue,
 } from './canonical';
 export {
   LEGACY_FSTRUCTURE_PORTABLE_FORMAT_VERSION,

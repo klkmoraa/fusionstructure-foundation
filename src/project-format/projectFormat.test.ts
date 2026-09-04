@@ -114,13 +114,32 @@ describe('neutral project-format v0.1', () => {
   it('canonicalizes the same JSON value deterministically before hashing', async () => {
     const unordered = { z: ['two', { b: false, a: true }], a: 1 };
     const ordered = { a: 1, z: ['two', { a: true, b: false }] };
+    const unorderedCanonical = canonicalizeProjectFormatJson(unordered);
+    const orderedCanonical = canonicalizeProjectFormatJson(ordered);
 
-    expect(canonicalizeProjectFormatJson(unordered)).toBe('{"a":1,"z":["two",{"a":true,"b":false}]}');
+    expect(unorderedCanonical).toEqual({ ok: true, value: '{"a":1,"z":["two",{"a":true,"b":false}]}' });
+    expect(orderedCanonical).toEqual(unorderedCanonical);
+    if (!unorderedCanonical.ok || !orderedCanonical.ok) return;
     expect(await createProjectFormatSha256(encoder.encode('abc')))
       .toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
-    expect(await createProjectFormatSha256(encoder.encode(canonicalizeProjectFormatJson(unordered))))
-      .toBe(await createProjectFormatSha256(encoder.encode(canonicalizeProjectFormatJson(ordered))));
-    expect(() => canonicalizeProjectFormatJson(new Array(1))).toThrow(/sparse/i);
+    expect(await createProjectFormatSha256(encoder.encode(unorderedCanonical.value)))
+      .toBe(await createProjectFormatSha256(encoder.encode(orderedCanonical.value)));
+  });
+
+  it('returns structured canonicalization failures without throwing for non-JSON values', () => {
+    const getterObject = {} as Record<string, unknown>;
+    Object.defineProperty(getterObject, 'unsafe', { enumerable: true, get: () => 'not-read' });
+    const cyclicObject: Record<string, unknown> = {};
+    cyclicObject.self = cyclicObject;
+    const inputs = [new Array(1), getterObject, cyclicObject, () => 'not-json'];
+
+    for (const input of inputs) {
+      expect(() => canonicalizeProjectFormatJson(input)).not.toThrow();
+      expect(canonicalizeProjectFormatJson(input)).toEqual({
+        ok: false,
+        issue: expect.objectContaining({ code: 'non-serializable-json' }),
+      });
+    }
   });
 
   it('preserves opaque extension bytes through validated read/write without embedding domain models', async () => {

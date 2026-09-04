@@ -519,12 +519,16 @@ export const readProjectFormatPackage = async (manifestBytes: unknown, files: un
     } catch {
       return failure([createIssue('malformed-manifest', '$', 'Manifest bytes must contain valid UTF-8 JSON.')]);
     }
-    const fileSnapshot = snapshotFiles(files);
-    if (!fileSnapshot.ok) return failure(fileSnapshot.report.issues);
-    const report = await validateProjectFormatPackage(parsed, fileSnapshot.value);
-    if (!report.ok) return failure(report.issues);
     try {
-      const canonicalManifest = JSON.parse(canonicalizeProjectFormatJson(parsed)) as ProjectFormatManifest;
+      const canonicalization = canonicalizeProjectFormatJson(parsed);
+      if (!canonicalization.ok) {
+        return failure([createIssue(canonicalization.issue.code, canonicalization.issue.path, canonicalization.issue.message)]);
+      }
+      const canonicalManifest = JSON.parse(canonicalization.value) as ProjectFormatManifest;
+      const fileSnapshot = snapshotFiles(files);
+      if (!fileSnapshot.ok) return failure(fileSnapshot.report.issues);
+      const report = await validateProjectFormatPackage(canonicalManifest, fileSnapshot.value);
+      if (!report.ok) return failure(report.issues);
       return success({ manifest: canonicalManifest, files: fileSnapshot.value });
     } catch {
       return failure([createIssue('non-serializable-json', '$', 'Manifest cannot be canonicalized as JSON.')]);
@@ -543,12 +547,14 @@ export const writeProjectFormatPackage = async (value: unknown): Promise<Project
     if (!isRecord(value) || !Object.prototype.hasOwnProperty.call(value, 'manifest') || !Object.prototype.hasOwnProperty.call(value, 'files')) {
       return failure([createIssue('malformed-package', '$', 'Expected a manifest and a Map of package files.')]);
     }
-    const manifestReport = validateProjectFormatManifest(value.manifest);
-    if (!manifestReport.ok) return failure(manifestReport.issues);
     let manifestText: string;
     let manifestSnapshot: unknown;
     try {
-      manifestText = canonicalizeProjectFormatJson(value.manifest);
+      const canonicalization = canonicalizeProjectFormatJson(value.manifest);
+      if (!canonicalization.ok) {
+        return failure([createIssue(canonicalization.issue.code, canonicalization.issue.path, canonicalization.issue.message)]);
+      }
+      manifestText = canonicalization.value;
       manifestSnapshot = JSON.parse(manifestText);
     } catch {
       return failure([createIssue('non-serializable-json', '$', 'Manifest cannot be canonicalized as JSON.')]);
@@ -579,18 +585,19 @@ const compareFormatVersions = (left: string, right: string): number | undefined 
 /** Current v0.1 has no destructive downgrade path; callers must use an explicit external adapter. */
 export const migrateProjectFormatManifest = (manifest: unknown, targetVersion: string): ProjectFormatOperationResult<ProjectFormatManifest> => {
   try {
-    const report = validateProjectFormatManifest(manifest);
+    const canonicalization = canonicalizeProjectFormatJson(manifest);
+    if (!canonicalization.ok) {
+      return failure([createIssue(canonicalization.issue.code, canonicalization.issue.path, canonicalization.issue.message)]);
+    }
+    const manifestSnapshot = JSON.parse(canonicalization.value) as ProjectFormatManifest;
+    const report = validateProjectFormatManifest(manifestSnapshot);
     if (!report.ok) return failure(report.issues);
     if (targetVersion !== PROJECT_FORMAT_VERSION) {
       const comparison = compareFormatVersions(targetVersion, PROJECT_FORMAT_VERSION);
       const code = comparison !== undefined && comparison < 0 ? 'unsupported-destructive-downgrade' : 'unsupported-target-version';
       return failure([createIssue(code, '$.formatVersion', `Project format ${PROJECT_FORMAT_VERSION} cannot be migrated to ${targetVersion}.`)]);
     }
-    try {
-      return success(JSON.parse(canonicalizeProjectFormatJson(manifest)) as ProjectFormatManifest);
-    } catch {
-      return failure([createIssue('non-serializable-json', '$', 'Manifest cannot be canonicalized as JSON.')]);
-    }
+    return success(manifestSnapshot);
   } catch {
     return failure([createIssue('malformed-manifest', '$', 'Manifest could not be safely migrated.')]);
   }
